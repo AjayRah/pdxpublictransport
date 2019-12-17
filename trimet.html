@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html>
+  <head>
+    <style>
+      #map{ height: 100%;}
+      html, body {
+        height: 100%;
+        margin: 0;
+        padding: 0; display: block;
+      }
+      #nav { position: fixed;
+        top: 0;
+        right: 0;
+        padding: 10px;
+        font-family: Arial;
+        background: #fffea1;
+        border: 1px solid #fc0; z-index:100;height:100%;opacity: .6;width:250px}
+    </style>
+    <script async src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <script>
+      var map;
+      var lastSince =Date.now()-10000000;
+      var vehicles = [];
+      var stopCoordinates = [];
+      var routeMarkers=[];
+      var flightPath = '';
+
+      function draw(){
+          webService("https://developer.trimet.org/ws/v2/vehicles/appid/04C87A7D9D9691E603E9A1028/bbox/"+ map.getBounds().toUrlValue() + "/since/" + lastSince, reqListener);
+      }
+
+      function initMap() {
+          map = new google.maps.Map(document.getElementById('map'), {
+        });
+        zoomAll();
+        google.maps.event.addListener(map, 'idle', function() {draw();});
+        locateMe();
+      }
+
+      function zoomAll(){
+        map.setCenter(new google.maps.LatLng(45.512794,-122.679565));
+        map.setZoom(12);
+      }
+      function locateMe(){
+        navigator.geolocation.getCurrentPosition(geoSuccess, geoError);
+      }
+      function geoSuccess(position){ map.setCenter({lat: position.coords.latitude, lng: position.coords.longitude}); 
+        var iAmHere = new google.maps.Marker({
+          map: map,
+          draggable: true,
+          animation: google.maps.Animation.DROP,
+          position: {lat: position.coords.latitude, lng: position.coords.longitude},
+        });
+        iAmHere.addListener('click', toggleBounce);
+        map.setZoom(14);
+      }
+
+      function toggleBounce() {
+        if (this.getAnimation() !== null) {
+          this.setAnimation(null);
+        } else {
+          this.setAnimation(google.maps.Animation.BOUNCE);
+          this.setAnimation(null);
+        }
+      }
+      function geoError(){}
+function updateDashboard(string){
+  if (string=="") 
+    document.getElementById('dashb').innerHTML=""; 
+  else 
+  document.getElementById('dashb').innerHTML += string;
+}
+
+      function reqListener () {
+        var updated=0;
+        updateDashboard("");
+        lastSince= this.response.resultSet.queryTime -10000;
+        $(this.response.resultSet.vehicle).each(function(index){
+          var t=this;
+          var found = false;
+          updateDashboard(t.vehicleID + " processed<br/>");
+            $(vehicles).each(function(index){
+                if(this.id===t.vehicleID) {
+                    this.setPosition(new google.maps.LatLng(t.latitude, t.longitude));
+                    updated+=1;
+                    found=true;
+                  return false;
+                }
+              });
+              
+                if (!found && this.signMessage!=null){
+                  var icon="http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
+                    if (this.type==="rail") icon="http://maps.google.com/mapfiles/ms/icons/red-dot.png"
+                    var marker = new google.maps.Marker({
+                      position: {lat: this.latitude, lng: this.longitude},
+                      map: map,
+                      title: this.signMessage + " - " +  this.vehicleID,
+                      icon: {
+                          url: icon
+                        }
+                  });
+                  marker.addListener('click', function() {
+                  getRoute(this.routeId, this.dir)
+                  var infowindow = new google.maps.InfoWindow({content: this.title});
+                  infowindow.open(map, this);
+                  });
+                  marker.id=this.vehicleID;
+                  marker.routeId=this.routeNumber;
+                  marker.dir=this.direction;
+                  vehicles.push(marker);
+                  }
+  })
+  updateDashboard(updated + "  updated<br/>");
+        }
+        setInterval(draw, 5000)
+
+      function getRoute(routeid, dir){
+        webService("https://developer.trimet.org/ws/V1/routeConfig/appid/04C87A7D9D9691E603E9A1028/json/true/route/" + routeid + "/stops/1/dir/" + dir, dispRoute)
+      }
+
+      function dispRoute(){
+        console.log(this.response.resultSet.route[0].dir[0].stop);
+        var locations=this.response.resultSet.route[0].dir[0].stop;
+
+        clearRouteMarkers();
+        stopCoordinates = [];
+        for (i = 0; i < locations.length; i++){
+            var marker = new google.maps.Marker({
+              position: new google.maps.LatLng(locations[i].lat, locations[i].lng),
+              map: map,
+              icon: {
+                path: google.maps.SymbolPath.CIRCLE,
+                fillColor: 'green',
+                fillOpacity: 1,
+                strokeColor: '#00A',
+                strokeOpacity: 0.4,
+                strokeWeight: 1,
+                scale: 4
+              },
+              desc: locations[i].desc
+        });
+            marker.addListener('click', function() {
+            var infowindow = new google.maps.InfoWindow({content: this.desc});
+              infowindow.open(map, this);
+            });
+
+            stopCoordinates.push(marker.getPosition());
+            routeMarkers.push(marker);
+      }
+
+      if (typeof flightPath === 'object') flightPath.setMap(null);
+
+      console.log(typeof flightPath);
+      flightPath = new google.maps.Polyline({
+      map: map,
+      path: stopCoordinates,
+      strokeColor: "#FF0000",
+      strokeOpacity: 1.0,
+      strokeWeight: 2
+    });
+      console.log(typeof flightPath);
+      document.getElementById('clearall').checked=false;
+}
+
+      function clearRouteMarkers(){
+        $(routeMarkers).each(function(index){this.setMap(null)});
+      }
+
+      function webService(url, cb){
+        var oReq = new XMLHttpRequest();
+          oReq.responseType = 'json';
+          oReq.addEventListener("load", cb);
+          oReq.open("GET", url);
+          oReq.send();
+      }
+      function clearAll(){
+        if (typeof flightPath === 'object') flightPath.setMap(null);
+        clearRouteMarkers();
+        
+      }
+</script>
+  </head>
+  <body>
+    <div id="nav">
+      <input type="checkbox" id="clearall" onclick="clearAll()">Clear All</checkbox><br/>
+      <input type="checkbox" id="zoomall" onclick="zoomAll()">Zoom All</checkbox><br/>
+      <input type="checkbox" id="locateme" onclick="locateMe()">Locate Me</checkbox><br/><br/><br/>
+      <div id="dashb"></div></div>
+    <div id="map"></div>
+<script async defer
+    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD3N888CsstFS0tZLJjOH6WIhZmJvk0Ouo&callback=initMap">
+    </script>
+</body>
+</html>
