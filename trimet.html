@@ -1,195 +1,184 @@
 <!DOCTYPE html>
 <html>
-  <head>
-    <style>
-      #map{ height: 100%;}
-      html, body {
-        height: 100%;
-        margin: 0;
-        padding: 0; display: block;
-      }
-      #nav { position: fixed;
-        top: 0;
-        right: 0;
-        padding: 10px;
-        font-family: Arial;
-        background: #fffea1;
-        border: 1px solid #fc0; z-index:100;height:100%;opacity: .6;width:250px}
-    </style>
-    <script async src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
-    <meta name="viewport" content="width=device-width, initial-scale=1">
+
+<head>
+  <title>Portland Public Transport</title>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <link rel="shortcut icon" type="image/x-icon" href="docs/images/favicon.ico" />
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.6.0/dist/leaflet.css"
+    integrity="sha512-xwE/Az9zrjBIphAcBb3F6JVqxf46+CDLwfLMHloNu6KEQCAWi6HcDUbeOfBIptF7tcCzusKFjFw2yuvEpDL9wQ=="
+    crossorigin="" />
+  <script async src="https://cdnjs.cloudflare.com/ajax/libs/zepto/1.2.0/zepto.min.js"></script>
+  <script src="https://unpkg.com/leaflet@1.6.0/dist/leaflet.js"
+    integrity="sha512-gZwIG9x3wUXg2hdXF6+rVkLF/0Vi9U8D2Ntg4Ga5I5BZpVkVxlJWbSQtXPSiUTtC0TjtGOmxa1AJPuV0CPthew=="
+    crossorigin=""></script>
+  <script src="Leaflet.MakiMarkers.js"></script>
+  <style>
+    html,
+    body,
+    #map {
+      height: 100%;
+      width: 100%;
+      margin: 0;
+      padding: 0;
+      border: 0
+    }
+
+    #nav {
+      position: fixed;
+      top: 0;
+      right: 0;
+      padding: 10px;
+      font-family: Arial;
+      font-size: 13px;
+      background: #fffea1;
+      border: 1px solid #fc0;
+      z-index: 999999;
+      height: 150px;
+      opacity: 1;
+      width: 300px
+    }
+  </style>
+</head>
+
+<body>
+  <div id='map'></div>
+  <div id="nav">
+    <input type="checkbox" id="clearall" onclick="clearAll()">Clear All</checkbox><br />
+    <input type="checkbox" id="zoomall" onclick="zoomAll()">Zoom All</checkbox><br />
+    <input type="checkbox" id="locateme" onclick="locateMe(this)">Locate Me</checkbox><br />
+    <hr /><b>Legend</b><br />
+    <img style="-webkit-user-select: none;margin: auto; width:20px; height:46px"
+      src="https://api.mapbox.com/v4/marker/pin-m-rail+E74C3C@2x.png?access_token=pk.eyJ1IjoiYmlnbWFwcHIiLCJhIjoiY2szdGU3ZWkxMDFybzNrczFieWU1NGY3diJ9.mUBYpqjgqJ1n7MbEFvPYLg">
+    <span style="padding-bottom:-15px">Red Line Train</span><br />
+    <img style="-webkit-user-select: none;margin: auto; width:20px; height:46px; top: 115px;position :absolute"
+      src="https://api.mapbox.com/v4/marker/pin-m-rail+2ECC71@2x.png?access_token=pk.eyJ1IjoiYmlnbWFwcHIiLCJhIjoiY2szdGU3ZWkxMDFybzNrczFieWU1NGY3diJ9.mUBYpqjgqJ1n7MbEFvPYLg"><br />
+    <img style="-webkit-user-select: none;margin: auto; width:20px; height:46px; top: 145px;position :absolute"
+      src="https://api.mapbox.com/v4/marker/pin-m-rail+F5B041@2x.png?access_token=pk.eyJ1IjoiYmlnbWFwcHIiLCJhIjoiY2szdGU3ZWkxMDFybzNrczFieWU1NGY3diJ9.mUBYpqjgqJ1n7MbEFvPYLg"><br />
+    <img style="-webkit-user-select: none;margin: auto; width:20px; height:46px"
+      src="https://api.mapbox.com/v4/marker/pin-m-rail+E74C3C@2x.png?access_token=pk.eyJ1IjoiYmlnbWFwcHIiLCJhIjoiY2szdGU3ZWkxMDFybzNrczFieWU1NGY3diJ9.mUBYpqjgqJ1n7MbEFvPYLg"><br />
     <script>
-      var map;
-      var lastSince =Date.now()-10000000;
+      var lastSince = Date.now() - 10000000;
       var vehicles = [];
       var stopCoordinates = [];
-      var routeMarkers=[];
+      var routeMarkers = [];
       var flightPath = '';
+      var map
 
-      function draw(){
-          webService("https://developer.trimet.org/ws/v2/vehicles/appid/04C87A7D9D9691E603E9A1028/bbox/"+ map.getBounds().toUrlValue() + "/since/" + lastSince, reqListener);
-      }
+      init();
+      draw();
+      setInterval(draw, 5000);
 
-      function initMap() {
-          map = new google.maps.Map(document.getElementById('map'), {
-        });
-        zoomAll();
-        google.maps.event.addListener(map, 'idle', function() {draw();});
-        locateMe();
-      }
-
-      function zoomAll(){
-        map.setCenter(new google.maps.LatLng(45.512794,-122.679565));
-        map.setZoom(12);
-      }
-      function locateMe(){
-        navigator.geolocation.getCurrentPosition(geoSuccess, geoError);
-      }
-      function geoSuccess(position){ map.setCenter({lat: position.coords.latitude, lng: position.coords.longitude}); 
-        var iAmHere = new google.maps.Marker({
-          map: map,
-          draggable: true,
-          animation: google.maps.Animation.DROP,
-          position: {lat: position.coords.latitude, lng: position.coords.longitude},
-        });
-        iAmHere.addListener('click', toggleBounce);
-        map.setZoom(14);
+      function init() {
+        map = L.map('map').setView([45.512794, -122.679565], 13);
+        L.MakiMarkers.accessToken = 'pk.eyJ1IjoiYmlnbWFwcHIiLCJhIjoiY2szdGU3ZWkxMDFybzNrczFieWU1NGY3diJ9.mUBYpqjgqJ1n7MbEFvPYLg';
+        L.tileLayer('https://api.mapbox.com/styles/v1/{id}/tiles/{z}/{x}/{y}?access_token=pk.eyJ1IjoibWFwYm94IiwiYSI6ImNpejY4NXVycTA2emYycXBndHRqcmZ3N3gifQ.rJcFIG214AriISLbB6B5aw', {
+          maxZoom: 18,
+          attribution: 'Map data &copy; <a href="https://www.openstreetmap.org/">OpenStreetMap</a> contributors, ' +
+            '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a>, ' +
+            'Imagery © <a href="https://www.mapbox.com/">Mapbox</a>',
+          id: 'mapbox/streets-v11'
+        }).addTo(map);
+        map.on('locationfound', onLocationFound);
+        map.on('locationerror', onLocationError);
       }
 
-      function toggleBounce() {
-        if (this.getAnimation() !== null) {
-          this.setAnimation(null);
-        } else {
-          this.setAnimation(google.maps.Animation.BOUNCE);
-          this.setAnimation(null);
-        }
-      }
-      function geoError(){}
-function updateDashboard(string){
-  if (string=="") 
-    document.getElementById('dashb').innerHTML=""; 
-  else 
-  document.getElementById('dashb').innerHTML += string;
-}
+      function onLocationFound(e) {
+        var radius = e.accuracy / 2;
 
-      function reqListener () {
-        var updated=0;
-        updateDashboard("");
-        lastSince= this.response.resultSet.queryTime -10000;
-        $(this.response.resultSet.vehicle).each(function(index){
-          var t=this;
+        L.marker(e.latlng).addTo(map)
+          .bindPopup("You are within " + radius + " meters from this point").openPopup();
+
+        L.circle(e.latlng, radius).addTo(map);
+      }
+
+      function onLocationError(e) {
+        alert("Sorry Geo-location service is unavailable at this time");
+      }
+
+      function draw() {
+        webService("https://developer.trimet.org/ws/v2/vehicles/appid/04C87A7D9D9691E603E9A1028/bbox/" + map.getBounds().toBBoxString() + "/since/" + lastSince, updateDash);
+      }
+
+      function webService(url, cb) {
+        var oReq = new XMLHttpRequest();
+        oReq.responseType = 'json';
+        oReq.addEventListener("load", cb);
+        oReq.open("GET", url);
+        oReq.send();
+      }
+
+      function updateDash() {
+        var updated = 0;
+        lastSince = this.response.resultSet.queryTime - 10000;
+        $(this.response.resultSet.vehicle).each(function (index) {
+          var t = this;
           var found = false;
-          updateDashboard(t.vehicleID + " processed<br/>");
-            $(vehicles).each(function(index){
-                if(this.id===t.vehicleID) {
-                    this.setPosition(new google.maps.LatLng(t.latitude, t.longitude));
-                    updated+=1;
-                    found=true;
-                  return false;
-                }
-              });
-              
-                if (!found && this.signMessage!=null){
-                  var icon="http://maps.google.com/mapfiles/ms/icons/blue-dot.png"
-                    if (this.type==="rail") icon="http://maps.google.com/mapfiles/ms/icons/red-dot.png"
-                    var marker = new google.maps.Marker({
-                      position: {lat: this.latitude, lng: this.longitude},
-                      map: map,
-                      title: this.signMessage + " - " +  this.vehicleID,
-                      icon: {
-                          url: icon
-                        }
-                  });
-                  marker.addListener('click', function() {
-                  getRoute(this.routeId, this.dir)
-                  var infowindow = new google.maps.InfoWindow({content: this.title});
-                  infowindow.open(map, this);
-                  });
-                  marker.id=this.vehicleID;
-                  marker.routeId=this.routeNumber;
-                  marker.dir=this.direction;
-                  vehicles.push(marker);
-                  }
-  })
-  updateDashboard(updated + "  updated<br/>");
-        }
-        setInterval(draw, 5000)
+          $(vehicles).each(function (index) {
+            if (this.id === t.vehicleID) {
+              this.setLatLng(L.latLng(t.latitude, t.longitude));
+              updated += 1;
+              found = true;
+              return false;
+            }
+          });
 
-      function getRoute(routeid, dir){
+          if (!found && this.signMessage != null) {
+            var color = "#3498DB";
+            if (this.signMessage.indexOf("Red") > -1) color = "#E74C3C";
+            if (this.signMessage.indexOf("Green") > -1) color = "#2ECC71";
+            if (this.signMessage.indexOf("Yellow") > -1) color = "#F4D03F";
+            if (this.signMessage.indexOf("Orange") > -1) color = "#F5B041";
+            if (this.type == "bus") color = "#BB8FCE";
+            var icon = L.MakiMarkers.icon({ icon: this.type, color: color, size: "m" });
+            var marker = L.marker([this.latitude, this.longitude], { icon: icon }).bindPopup(this.signMessage, { closeOnClick: false, autoClose: false });
+            marker.on('click', function () {
+              getRoute(this.routeId, this.dir)
+            });
+            marker.id = this.vehicleID;
+            marker.routeId = this.routeNumber;
+            marker.dir = this.direction;
+            vehicles.push(marker);
+            marker.addTo(map);
+
+          }
+
+        })
+      }
+
+      function locateMe(elem) {
+        map.locate({ setView: true, maxZoom: 14 }); draw();
+      }
+
+      function getRoute(routeid, dir) {
         webService("https://developer.trimet.org/ws/V1/routeConfig/appid/04C87A7D9D9691E603E9A1028/json/true/route/" + routeid + "/stops/1/dir/" + dir, dispRoute)
       }
 
-      function dispRoute(){
+      function dispRoute() {
         console.log(this.response.resultSet.route[0].dir[0].stop);
-        var locations=this.response.resultSet.route[0].dir[0].stop;
+        var locations = this.response.resultSet.route[0].dir[0].stop;
 
         clearRouteMarkers();
         stopCoordinates = [];
-        for (i = 0; i < locations.length; i++){
-            var marker = new google.maps.Marker({
-              position: new google.maps.LatLng(locations[i].lat, locations[i].lng),
-              map: map,
-              icon: {
-                path: google.maps.SymbolPath.CIRCLE,
-                fillColor: 'green',
-                fillOpacity: 1,
-                strokeColor: '#00A',
-                strokeOpacity: 0.4,
-                strokeWeight: 1,
-                scale: 4
-              },
-              desc: locations[i].desc
-        });
-            marker.addListener('click', function() {
-            var infowindow = new google.maps.InfoWindow({content: this.desc});
-              infowindow.open(map, this);
-            });
+        for (i = 0; i < locations.length; i++) {
+          var stop = L.circleMarker(L.latLng(locations[i].lat, locations[i].lng), { radius: 3, fill: true , fillColor:"#555", opacity:1, color:"#555", weight:4}).bindPopup(locations[i].desc).addTo(map)
+          stopCoordinates.push(stop.getLatLng());
+          routeMarkers.push(stop);
+        }
 
-            stopCoordinates.push(marker.getPosition());
-            routeMarkers.push(marker);
+        if (typeof flightPath === 'object') flightPath.remove();
+
+        console.log(typeof flightPath);
+        flightPath = L.polyline(stopCoordinates, { color: 'red' }).addTo(map);
+
+        console.log(typeof flightPath);
+        document.getElementById('clearall').checked = false;
       }
 
-      if (typeof flightPath === 'object') flightPath.setMap(null);
-
-      console.log(typeof flightPath);
-      flightPath = new google.maps.Polyline({
-      map: map,
-      path: stopCoordinates,
-      strokeColor: "#FF0000",
-      strokeOpacity: 1.0,
-      strokeWeight: 2
-    });
-      console.log(typeof flightPath);
-      document.getElementById('clearall').checked=false;
-}
-
-      function clearRouteMarkers(){
-        $(routeMarkers).each(function(index){this.setMap(null)});
+      function clearRouteMarkers() {
+        $(routeMarkers).each(function (index) { this.remove() });
       }
-
-      function webService(url, cb){
-        var oReq = new XMLHttpRequest();
-          oReq.responseType = 'json';
-          oReq.addEventListener("load", cb);
-          oReq.open("GET", url);
-          oReq.send();
-      }
-      function clearAll(){
-        if (typeof flightPath === 'object') flightPath.setMap(null);
-        clearRouteMarkers();
-        
-      }
-</script>
-  </head>
-  <body>
-    <div id="nav">
-      <input type="checkbox" id="clearall" onclick="clearAll()">Clear All</checkbox><br/>
-      <input type="checkbox" id="zoomall" onclick="zoomAll()">Zoom All</checkbox><br/>
-      <input type="checkbox" id="locateme" onclick="locateMe()">Locate Me</checkbox><br/><br/><br/>
-      <div id="dashb"></div></div>
-    <div id="map"></div>
-<script async defer
-    src="https://maps.googleapis.com/maps/api/js?key=AIzaSyD3N888CsstFS0tZLJjOH6WIhZmJvk0Ouo&callback=initMap">
     </script>
 </body>
 </html>
